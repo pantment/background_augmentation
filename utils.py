@@ -2,52 +2,24 @@ import os
 from PIL import Image
 import cv2
 import numpy as np
-import random
-import logging
-from typing import Optional, Tuple
+from factory import BinarySegmentationAugmentationFactory, ObjectDetectionAugmentationFactory
 
-def process_image(src_image: str, src_mask: str, src_backgrounds: list, annotation: Optional[str], 
-                  dataloader, image_augmentor) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
-    """
-    Process the input image, mask, and background using the provided augmentor and combiner.
+def get_augmentation_factory(augmentation_type):
 
-    Args:
-        src_image (str): Path to the source image.
-        src_mask (str): Path to the source mask.
-        src_backgrounds (list): List of background image paths.
-        annotation (Optional[str]): Path to the annotation file (if available).
-        dataloader: The dataloader used for loading the images, masks, and annotations.
-        image_augmentor (ImageAugmentor): The augmentor to apply transformations.
-        image_combiner (ImageCombiner): The combiner for resizing and combining images.
+    factories = {
+        'binary_segmentation': BinarySegmentationAugmentationFactory(),
+        'object_detection': ObjectDetectionAugmentationFactory()
+    }
+    if augmentation_type in factories:
+        return factories[augmentation_type]
+    else:
+        raise ValueError(f"Invalid augmentation type: {augmentation_type}")
     
-    Returns:
-        Tuple containing the processed image, mask, transformed background, and transformed annotation (if available).
-    """
-    bgrnd_id = random.randint(0, len(src_backgrounds) - 1)
-
-    try:
-        # Load the image, mask, and background
-        input_image = dataloader.load_image(src_image)
-        input_mask = dataloader.load_mask(src_mask)
-        background = dataloader.load_image(src_backgrounds[bgrnd_id])
-        bounding_boxes = None
-
-        # Load annotations if provided (only for object detection)
-        if annotation is not None:
-            bounding_boxes = dataloader.load_annotation(annotation)
-
-        # Transform the background
-        transformed_background = image_augmentor.apply_background_transformations(background)
-
-        # Transform the image, mask, and optionally the annotations
-        augmented_image, augmented_mask, transformed_bounding_boxes = image_augmentor.apply_object_transformations(
-            input_image, input_mask, bounding_boxes)
-
-        return augmented_image, augmented_mask, transformed_background, transformed_bounding_boxes
-
-    except Exception as e:
-        logging.error(f"\nError processing image: {src_image}, mask: {src_mask}, annotation: {annotation} with error: {e}")
-        return None, None, None, None
+def create_background_augmentor(augmentation_type, background_transformations=None, object_transformations=None, annotation_format=None, interpolation=cv2.INTER_NEAREST, enable_size_variance=False):
+    factory = get_augmentation_factory(augmentation_type)
+    transformation_handler = factory.get_transformation_handler(background_transformations, object_transformations, annotation_format)
+    placement_handler = factory.get_placement_handler(interpolation, enable_size_variance)
+    return factory.get_augmentror(transformation_handler, placement_handler)
 
 def visualize_yolo_annotations(image: np.ndarray, annotations: np.ndarray, mask: np.ndarray = None) -> np.ndarray:
     """
